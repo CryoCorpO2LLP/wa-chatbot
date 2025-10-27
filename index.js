@@ -1,7 +1,8 @@
-// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (with persistent memory + Replit keep-alive)
+// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (persistent memory + 24x7 Replit uptime)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
+const fetch = require("node-fetch");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
@@ -13,13 +14,8 @@ const openai = new OpenAI({
 
 // === 2️⃣ Local JSON Storage (Persistent Database) ===
 const leadsFile = "./leads.json";
+if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, JSON.stringify([]));
 
-// Create leads.json if missing
-if (!fs.existsSync(leadsFile)) {
-  fs.writeFileSync(leadsFile, JSON.stringify([]));
-}
-
-// Load all saved leads
 function loadLeads() {
   try {
     return JSON.parse(fs.readFileSync(leadsFile, "utf8"));
@@ -27,13 +23,9 @@ function loadLeads() {
     return [];
   }
 }
-
-// Save leads back to file
 function saveLeads(leads) {
   fs.writeFileSync(leadsFile, JSON.stringify(leads, null, 2));
 }
-
-// Check if a user is already registered
 function findLeadByNumber(number) {
   const leads = loadLeads();
   return leads.find((lead) => lead.number === number);
@@ -41,7 +33,20 @@ function findLeadByNumber(number) {
 
 // === 3️⃣ WhatsApp Client Setup ===
 const client = new Client({
-  authStrategy: new LocalAuth(),
+  authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
+  puppeteer: {
+    headless: true,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
+      "--disable-gpu",
+      "--single-process",
+    ],
+  },
 });
 
 client.on("qr", (qr) => {
@@ -64,16 +69,17 @@ client.on("auth_failure", (msg) => {
 
 client.on("disconnected", (reason) => {
   console.log("⚠️ Disconnected:", reason);
+  console.log("🔁 Reconnecting...");
+  client.initialize();
 });
 
 client.on("ready", () => {
   console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!");
 });
 
-// === 4️⃣ Saloni Context (CRM + Technical) ===
+// === 4️⃣ Saloni Context ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
-
 You handle all communication about:
 - Sales Orders (SO)
 - Purchase Orders (PO)
@@ -90,10 +96,10 @@ If user mentions placing an order, checking PI, or follow-up, guide them natural
 Keep all replies short, warm, and professional.
 `;
 
-// === 5️⃣ Temporary Step Tracker for Ongoing Registration ===
+// === 5️⃣ Temporary Step Tracker ===
 const leadData = {};
 
-// === 6️⃣ Helper: Save new lead ===
+// === 6️⃣ Save New Lead ===
 function saveLead(lead) {
   const leads = loadLeads();
   leads.push({
@@ -104,7 +110,7 @@ function saveLead(lead) {
   console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
 }
 
-// === 7️⃣ AI Reply Function ===
+// === 7️⃣ AI Reply ===
 async function getAIReply(userMessage) {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -122,11 +128,10 @@ client.on("message", async (msg) => {
   const text = msg.body.trim();
   const from = msg.from;
   const savedLead = findLeadByNumber(from);
-
   console.log(`💬 ${from}: ${text}`);
   if (msg.fromMe) return;
 
-  // === New user ===
+  // New user
   if (!savedLead && !leadData[from]) {
     if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
       leadData[from] = { step: 1 };
@@ -137,10 +142,9 @@ client.on("message", async (msg) => {
     }
   }
 
-  // === Registration Process ===
+  // Registration process
   if (leadData[from]) {
     const lead = leadData[from];
-
     if (lead.step === 1) {
       lead.name = text;
       lead.step = 2;
@@ -168,7 +172,7 @@ client.on("message", async (msg) => {
     }
   }
 
-  // === Returning user ===
+  // Returning user
   if (savedLead) {
     if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
       await msg.reply(
@@ -189,13 +193,12 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
   }
 });
 
-// === 9️⃣ Start Bot ===
+// === 9️⃣ Initialize Bot ===
 console.log("⚙️ Initializing WhatsApp client...");
 client.initialize();
 
 // === 🔟 Keep Replit Alive + Simple Web Page ===
 const app = express();
-
 app.get("/", (req, res) => {
   res.send(`
     <h2>✅ CryoCorp WhatsApp AI Bot (Saloni)</h2>
@@ -208,3 +211,8 @@ const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`🌐 Express web server running on port ${PORT}`);
 });
+
+// === 11️⃣ Self Ping Every 5 Minutes ===
+setInterval(() => {
+  fetch(`https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`).catch(() => {});
+}, 5 * 60 * 1000);
