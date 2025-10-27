@@ -36,18 +36,20 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
   puppeteer: {
     headless: true,
+    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-accelerated-2d-canvas",
-      "--no-first-run",
-      "--no-zygote",
+      "--disable-extensions",
       "--disable-gpu",
       "--single-process",
+      "--no-zygote",
+      "--disable-software-rasterizer",
     ],
   },
 });
+
 
 client.on("qr", (qr) => {
   console.clear();
