@@ -1,4 +1,4 @@
-// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (Self-sustaining Replit Version)
+// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (with persistent memory + Replit keep-alive)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
@@ -6,26 +6,20 @@ const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
 
-// === 1️⃣ Basic Web Server for Replit Keep-Alive ===
-const app = express();
-app.get("/", (req, res) => res.send("🚀 CryoCorp O2 LLP WhatsApp AI Bot (Saloni) is running!"));
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`🌐 Express server running on port ${PORT}`));
-
-// Ping itself every 5 minutes (300,000 ms) to prevent Replit sleep
-setInterval(() => {
-  require("http").get(`http://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`);
-}, 300000);
-
-// === 2️⃣ OpenAI Setup ===
+// === 1️⃣ OpenAI Setup ===
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// === 3️⃣ Local JSON Storage (Persistent Database) ===
+// === 2️⃣ Local JSON Storage (Persistent Database) ===
 const leadsFile = "./leads.json";
-if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, JSON.stringify([]));
 
+// Create leads.json if missing
+if (!fs.existsSync(leadsFile)) {
+  fs.writeFileSync(leadsFile, JSON.stringify([]));
+}
+
+// Load all saved leads
 function loadLeads() {
   try {
     return JSON.parse(fs.readFileSync(leadsFile, "utf8"));
@@ -34,16 +28,18 @@ function loadLeads() {
   }
 }
 
+// Save leads back to file
 function saveLeads(leads) {
   fs.writeFileSync(leadsFile, JSON.stringify(leads, null, 2));
 }
 
+// Check if a user is already registered
 function findLeadByNumber(number) {
   const leads = loadLeads();
   return leads.find((lead) => lead.number === number);
 }
 
-// === 4️⃣ WhatsApp Client Setup ===
+// === 3️⃣ WhatsApp Client Setup ===
 const client = new Client({
   authStrategy: new LocalAuth(),
 });
@@ -74,7 +70,7 @@ client.on("ready", () => {
   console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!");
 });
 
-// === 5️⃣ Saloni Context (CRM + Technical) ===
+// === 4️⃣ Saloni Context (CRM + Technical) ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 
@@ -94,9 +90,10 @@ If user mentions placing an order, checking PI, or follow-up, guide them natural
 Keep all replies short, warm, and professional.
 `;
 
-// === 6️⃣ Temporary Step Tracker for Ongoing Registration ===
+// === 5️⃣ Temporary Step Tracker for Ongoing Registration ===
 const leadData = {};
 
+// === 6️⃣ Helper: Save new lead ===
 function saveLead(lead) {
   const leads = loadLeads();
   leads.push({
@@ -195,3 +192,19 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
 // === 9️⃣ Start Bot ===
 console.log("⚙️ Initializing WhatsApp client...");
 client.initialize();
+
+// === 🔟 Keep Replit Alive + Simple Web Page ===
+const app = express();
+
+app.get("/", (req, res) => {
+  res.send(`
+    <h2>✅ CryoCorp WhatsApp AI Bot (Saloni)</h2>
+    <p>Status: Running and connected to WhatsApp!</p>
+    <p>Uptime ping active to keep bot alive on Replit ☁️</p>
+  `);
+});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🌐 Express web server running on port ${PORT}`);
+});
