@@ -1,19 +1,19 @@
 {
   "name": "cryocorp-whatsapp-ai-bot",
-  "version": "1.0.1",
-  "description": "CryoCorp O2 LLP WhatsApp AI Bot (Saloni CRM) — powered by ChatGPT and whatsapp-web.js",
+  "version": "1.0.0",
+  "description": "CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (persistent memory + 24x7 uptime)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js",
-    "postinstall": "npx puppeteer browsers install chrome"
+    "start": "node index.js"
   },
   "keywords": [
     "whatsapp",
     "chatgpt",
+    "openai",
     "bot",
     "crm",
     "render",
-    "puppeteer"
+    "replit"
   ],
   "author": "CryoCorp O2 LLP",
   "license": "ISC",
@@ -22,19 +22,19 @@
     "express": "^5.1.0",
     "google-auth-library": "^10.4.1",
     "google-spreadsheet": "^5.0.2",
+    "node-fetch": "^3.3.2",
     "openai": "^6.7.0",
-    "puppeteer": "^24.2.0",
+    "puppeteer": "^24.3.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.23.0",
-    "node-fetch": "^3.3.2"
+    "whatsapp-web.js": "^1.25.0"
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/kaushal25122001-dot/wa-chatbot.git"
+    "url": "https://github.com/CryoCorpO2LLP/wa-chatbot.git"
   },
   "bugs": {
-    "url": "https://github.com/kaushal25122001-dot/wa-chatbot/issues"
+    "url": "https://github.com/CryoCorpO2LLP/wa-chatbot/issues"
   },
   "homepage": "https://cryocorp-whatsapp-ai-bot.onrender.com"
 }
