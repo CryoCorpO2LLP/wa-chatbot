@@ -1,3 +1,13 @@
-.wwebjs_cache/
+# Node.js
 node_modules/
 .env
+package-lock.json
+
+# WhatsApp Auth Data
+.wwebjs_auth/
+leads.json
+chrome_debug.log
+
+# System
+.DS_Store
+Thumbs.db
