@@ -1,6 +1,4 @@
-// =====================================================
-// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (Render 24×7 Safe)
-// =====================================================
+// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Render Safe)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
@@ -32,19 +30,20 @@ function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 3️⃣ Chromium Setup (Render / Local) ===
+// === 3️⃣ Universal Puppeteer Setup (Render / Local) ===
 let chromium = null;
 try {
   chromium = require("@sparticuz/chromium");
 } catch {
   console.warn("⚠️ @sparticuz/chromium not found, using local Chrome instead.");
 }
+
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
 // === 4️⃣ QR Storage (for /qr route) ===
 let latestQR = null;
 
-// === 5️⃣ Create WhatsApp Client (Render-Safe) ===
+// === 5️⃣ Create WhatsApp Client ===
 async function createWhatsAppClient() {
   let executablePath;
   try {
@@ -71,13 +70,11 @@ async function createWhatsAppClient() {
         "--single-process",
         "--disable-background-timer-throttling",
         "--disable-renderer-backgrounding",
-        "--window-size=1920,1080",
-        "--start-maximized",
       ],
     },
   });
 
-  // === QR & Session Events ===
+  // === QR Events ===
   client.on("qr", async (qr) => {
     latestQR = await qrcode.toDataURL(qr);
     console.log("📱 New QR generated — open /qr to scan it.");
@@ -87,32 +84,18 @@ async function createWhatsAppClient() {
     console.log(`⏳ Loading WhatsApp Web ${p}%: ${msg}`)
   );
   client.on("authenticated", () => console.log("🔐 Authenticated successfully!"));
-  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
-
-  client.on("auth_failure", (msg) =>
-    console.error("❌ Authentication failure:", msg)
-  );
-
-  // === Auto Recovery on Disconnect ===
-  client.on("disconnected", async (reason) => {
-    console.log("⚠️ Disconnected:", reason);
-    console.log("♻️ Restarting WhatsApp client safely...");
-    try {
-      await client.destroy();
-    } catch (e) {
-      console.error("Destroy error (ignored):", e.message);
-    }
-    setTimeout(async () => {
-      const newClient = await createWhatsAppClient();
-      await setupMessageHandler(newClient);
-      newClient.initialize();
-    }, 8000);
+  client.on("auth_failure", (msg) => console.error("❌ Authentication failure:", msg));
+  client.on("disconnected", (r) => {
+    console.log("⚠️ Disconnected:", r);
+    console.log("♻️ Restarting WhatsApp client...");
+    setTimeout(() => client.initialize(), 5000);
   });
+  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
 
   return client;
 }
 
-// === 6️⃣ AI Context (Saloni Persona) ===
+// === 6️⃣ AI Context (Saloni CRM Persona) ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 You handle all communication about:
@@ -141,97 +124,93 @@ function saveLead(lead) {
   console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
 }
 
-// === 8️⃣ AI Reply Helper ===
+// === 8️⃣ AI Reply ===
 async function getAIReply(userMessage) {
-  try {
-    const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        { role: "system", content: SALONI_CONTEXT },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.7,
-    });
-    return completion.choices[0].message.content.trim();
-  } catch (err) {
-    console.error("❌ OpenAI API error:", err.message);
-    return "⚠️ AI service temporarily unavailable. Please try again later.";
-  }
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [
+      { role: "system", content: SALONI_CONTEXT },
+      { role: "user", content: userMessage },
+    ],
+    temperature: 0.7,
+  });
+  return completion.choices[0].message.content.trim();
 }
 
-// === 9️⃣ WhatsApp Message Handler ===
+// === 9️⃣ WhatsApp Message Handling ===
 async function setupMessageHandler(client) {
   client.on("message", async (msg) => {
-    try {
-      const text = msg.body.trim();
-      const from = msg.from;
-      const savedLead = findLeadByNumber(from);
-      console.log(`💬 ${from}: ${text}`);
+    const text = msg.body.trim();
+    const from = msg.from;
+    const savedLead = findLeadByNumber(from);
+    console.log(`💬 ${from}: ${text}`);
 
-      if (msg.fromMe) return;
+    if (msg.fromMe) return;
 
-      // New lead onboarding
-      if (!savedLead && !leadData[from]) {
-        if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
-          leadData[from] = { step: 1 };
-          await msg.reply(
-            "👋 Hello! This is *Saloni* from *CryoCorp O₂ LLP*.\nWelcome! May I know your *Full Name*?"
-          );
-          return;
-        }
+    // New lead onboarding
+    if (!savedLead && !leadData[from]) {
+      if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
+        leadData[from] = { step: 1 };
+        await msg.reply(
+          "👋 Hello! This is *Saloni* from *CryoCorp O₂ LLP*.\nWelcome! May I know your *Full Name*?"
+        );
+        return;
       }
+    }
 
-      // Sequential lead data capture
-      if (leadData[from]) {
-        const lead = leadData[from];
-        if (lead.step === 1) {
-          lead.name = text;
-          lead.step = 2;
-          await msg.reply(`Nice to meet you, *${lead.name}*! May I know your *Company Name*?`);
-          return;
-        } else if (lead.step === 2) {
-          lead.company = text;
-          lead.step = 3;
-          await msg.reply("Got it 👍 Could you please share your *Email ID*?");
-          return;
-        } else if (lead.step === 3) {
-          lead.email = text;
-          lead.step = 4;
-          await msg.reply("Perfect 😊 Lastly, may I have your *Contact Number*?");
-          return;
-        } else if (lead.step === 4) {
-          lead.contact = text;
-          lead.number = from;
-          saveLead(lead);
-          await msg.reply(
-            `✅ Thank you, *${lead.name} from ${lead.company}!* Your details have been securely saved.\nHow can I assist you today?`
-          );
-          delete leadData[from];
-          return;
-        }
+    // Sequential lead data capture
+    if (leadData[from]) {
+      const lead = leadData[from];
+      if (lead.step === 1) {
+        lead.name = text;
+        lead.step = 2;
+        await msg.reply(`Nice to meet you, *${lead.name}*! May I know your *Company Name*?`);
+        return;
+      } else if (lead.step === 2) {
+        lead.company = text;
+        lead.step = 3;
+        await msg.reply("Got it 👍 Could you please share your *Email ID*?");
+        return;
+      } else if (lead.step === 3) {
+        lead.email = text;
+        lead.step = 4;
+        await msg.reply("Perfect 😊 Lastly, may I have your *Contact Number*?");
+        return;
+      } else if (lead.step === 4) {
+        lead.contact = text;
+        lead.number = from;
+        saveLead(lead);
+        await msg.reply(
+          `✅ Thank you, *${lead.name} from ${lead.company}!* Your details have been securely saved.\nHow can I assist you today?`
+        );
+        delete leadData[from];
+        return;
       }
+    }
 
-      // Returning leads
-      if (savedLead) {
-        if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
-          await msg.reply(
-            `👋 Welcome back, *${savedLead.name} from ${savedLead.company}!*  
+    // Returning leads
+    if (savedLead) {
+      if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
+        await msg.reply(
+          `👋 Welcome back, *${savedLead.name} from ${savedLead.company}!*  
 How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
-          );
-          return;
-        }
+        );
+        return;
+      }
 
+      try {
         const reply = await getAIReply(text);
         await msg.reply(reply);
         console.log(`🤖 Saloni: ${reply}`);
+      } catch (err) {
+        console.error("❌ AI Error:", err);
+        await msg.reply("Sorry, something went wrong while connecting to CryoCorp AI.");
       }
-    } catch (err) {
-      console.error("❌ Message handler error:", err.message);
     }
   });
 }
 
-// === 🔟 Express Server for QR + Keep Alive ===
+// === 🔟 Express Web Server ===
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -247,6 +226,7 @@ app.get("/", (req, res) => {
   `);
 });
 
+// QR Web Route
 app.get("/qr", (req, res) => {
   if (!latestQR) {
     return res.send(`
@@ -269,35 +249,20 @@ app.get("/qr", (req, res) => {
 
 app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
 
-// === 11️⃣ Keep Alive (Replit / Render) ===
-setInterval(() => {
-  axios
-    .get(`https://${process.env.RENDER_EXTERNAL_URL || ""}`)
-    .then(() => console.log("🔁 Keep-alive ping OK"))
-    .catch(() => {});
-}, 10 * 60 * 1000);
+// === 11️⃣ Optional Replit Self-Ping ===
+if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
+  setInterval(() => {
+    axios
+      .get(`https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`)
+      .then(() => console.log("🔁 Self-ping OK"))
+      .catch(() => console.log("⚠️ Self-ping failed (maybe restarting)"));
+  }, 5 * 60 * 1000);
+}
 
-// === 12️⃣ Start WhatsApp Client with Auto-Recovery ===
+// === 12️⃣ Start WhatsApp Client ===
 (async () => {
   console.log("⚙️ Initializing WhatsApp client...");
-  let client = await createWhatsAppClient();
+  const client = await createWhatsAppClient();
   await setupMessageHandler(client);
   client.initialize();
-
-  // Crash Recovery
-  process.on("uncaughtException", async (err) => {
-    console.error("💥 Uncaught Exception:", err.message);
-    try {
-      await client.destroy();
-    } catch {}
-    setTimeout(async () => {
-      client = await createWhatsAppClient();
-      await setupMessageHandler(client);
-      client.initialize();
-    }, 5000);
-  });
-
-  process.on("unhandledRejection", async (err) => {
-    console.error("💥 Unhandled Rejection:", err);
-  });
 })();
