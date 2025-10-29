@@ -1,9 +1,9 @@
-// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Universal Version)
+// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Render Safe)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
 const axios = require("axios");
-const qrcode = require("qrcode-terminal");
+const qrcode = require("qrcode");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const OpenAI = require("openai");
 
@@ -30,7 +30,7 @@ function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 3️⃣ Universal Puppeteer Setup (Render / Replit / Local) ===
+// === 3️⃣ Universal Puppeteer Setup (Render / Local) ===
 let chromium = null;
 try {
   chromium = require("@sparticuz/chromium");
@@ -40,10 +40,12 @@ try {
 
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
-// Create WhatsApp client dynamically
+// === 4️⃣ QR Storage (for /qr route) ===
+let latestQR = null;
+
+// === 5️⃣ Create WhatsApp Client ===
 async function createWhatsAppClient() {
   let executablePath;
-
   try {
     executablePath = isRender && chromium ? await chromium.executablePath() : undefined;
   } catch {
@@ -72,11 +74,10 @@ async function createWhatsAppClient() {
     },
   });
 
-  // QR & session events
-  client.on("qr", (qr) => {
-    console.clear();
-    console.log("📱 Scan this QR code to connect WhatsApp:\n");
-    qrcode.generate(qr, { small: true });
+  // === QR Events ===
+  client.on("qr", async (qr) => {
+    latestQR = await qrcode.toDataURL(qr);
+    console.log("📱 New QR generated — open /qr to scan it.");
   });
 
   client.on("loading_screen", (p, msg) =>
@@ -94,7 +95,7 @@ async function createWhatsAppClient() {
   return client;
 }
 
-// === 4️⃣ AI Context (Saloni CRM) ===
+// === 6️⃣ AI Context (Saloni CRM Persona) ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 You handle all communication about:
@@ -110,7 +111,7 @@ If the query is technical (PSA/ASU plant, capacity, ROI, purity), reply:
 Never re-ask info already given.
 `;
 
-// === 5️⃣ Temporary Lead Tracker ===
+// === 7️⃣ Temporary Lead Tracker ===
 const leadData = {};
 
 function saveLead(lead) {
@@ -123,7 +124,7 @@ function saveLead(lead) {
   console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
 }
 
-// === 6️⃣ AI Reply Helper ===
+// === 8️⃣ AI Reply ===
 async function getAIReply(userMessage) {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -136,7 +137,7 @@ async function getAIReply(userMessage) {
   return completion.choices[0].message.content.trim();
 }
 
-// === 7️⃣ WhatsApp Message Handler ===
+// === 9️⃣ WhatsApp Message Handling ===
 async function setupMessageHandler(client) {
   client.on("message", async (msg) => {
     const text = msg.body.trim();
@@ -209,13 +210,46 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
   });
 }
 
-// === 8️⃣ Express Server (Health + Keep-alive) ===
+// === 🔟 Express Web Server ===
 const app = express();
 const PORT = process.env.PORT || 3000;
-app.get("/", (req, res) => res.send("✅ CryoCorp O₂ LLP WhatsApp Bot — Saloni is Live!"));
+
+app.get("/", (req, res) => {
+  res.send(`
+    <html>
+      <head><title>CryoCorp WhatsApp AI Bot</title></head>
+      <body style="font-family:sans-serif; text-align:center; background:#f9f9f9; color:#333;">
+        <h2>✅ CryoCorp O₂ LLP WhatsApp Bot — Saloni is Live!</h2>
+        <p>Visit <a href="/qr">/qr</a> to scan the WhatsApp login QR code.</p>
+      </body>
+    </html>
+  `);
+});
+
+// QR Web Route
+app.get("/qr", (req, res) => {
+  if (!latestQR) {
+    return res.send(`
+      <html><body style="font-family:sans-serif; text-align:center;">
+      <h3>❌ QR not ready yet. Please refresh after a few seconds.</h3>
+      </body></html>
+    `);
+  }
+  res.send(`
+    <html>
+      <head><title>WhatsApp QR - CryoCorp</title></head>
+      <body style="text-align:center; background:#f5f5f5; font-family:sans-serif;">
+        <h2>📱 Scan this QR to connect WhatsApp</h2>
+        <img src="${latestQR}" style="width:300px; border:8px solid #25D366; border-radius:12px; margin-top:20px;" />
+        <p style="margin-top:15px;">Refresh if expired.</p>
+      </body>
+    </html>
+  `);
+});
+
 app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
 
-// === 9️⃣ Optional Replit Self-Ping ===
+// === 11️⃣ Optional Replit Self-Ping ===
 if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   setInterval(() => {
     axios
@@ -225,7 +259,7 @@ if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   }, 5 * 60 * 1000);
 }
 
-// === 🔟 Initialize WhatsApp Client ===
+// === 12️⃣ Start WhatsApp Client ===
 (async () => {
   console.log("⚙️ Initializing WhatsApp client...");
   const client = await createWhatsAppClient();
