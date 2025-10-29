@@ -4,7 +4,8 @@
   "description": "CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (persistent memory + 24x7 uptime)",
   "main": "index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node index.js",
+    "postinstall": "apt-get update && apt-get install -y chromium"
   },
   "keywords": [
     "whatsapp",
@@ -18,16 +19,17 @@
   "author": "CryoCorp O2 LLP",
   "license": "ISC",
   "dependencies": {
+    "axios": "^1.13.1",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "google-auth-library": "^10.4.1",
     "google-spreadsheet": "^5.0.2",
     "node-fetch": "^3.3.2",
     "openai": "^6.7.0",
-    "puppeteer": "^24.3.0",
+    "puppeteer": "^24.26.1",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.25.0"
+    "whatsapp-web.js": "^1.34.1"
   },
   "repository": {
     "type": "git",
