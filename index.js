@@ -1,4 +1,4 @@
-// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Universal Version)
+// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Universal Version)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
@@ -6,14 +6,13 @@ const axios = require("axios");
 const qrcode = require("qrcode-terminal");
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const OpenAI = require("openai");
-const os = require("os");
 
 // === 1️⃣ OpenAI Setup ===
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-// === 2️⃣ Local JSON Storage (Persistent Database) ===
+// === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
 if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, JSON.stringify([]));
 
@@ -28,26 +27,28 @@ function saveLeads(leads) {
   fs.writeFileSync(leadsFile, JSON.stringify(leads, null, 2));
 }
 function findLeadByNumber(number) {
-  const leads = loadLeads();
-  return leads.find((lead) => lead.number === number);
+  return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 3️⃣ Universal Puppeteer Setup (Render / Replit / VS Code) ===
-let chromium;
+// === 3️⃣ Universal Puppeteer Setup (Render / Replit / Local) ===
+let chromium = null;
 try {
-  chromium = require("@sparticuz/chromium"); // For serverless / Render
+  chromium = require("@sparticuz/chromium");
 } catch {
-  chromium = null;
+  console.warn("⚠️ @sparticuz/chromium not found, using local Chrome instead.");
 }
 
-const isRender = !!process.env.RENDER;
-const isServer = isRender || process.env.NODE_ENV === "production" || process.env.CI;
+const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
-// === Create WhatsApp client dynamically ===
+// Create WhatsApp client dynamically
 async function createWhatsAppClient() {
-  const executablePath = isServer
-    ? await chromium.executablePath()
-    : undefined; // use local Chrome if available
+  let executablePath;
+
+  try {
+    executablePath = isRender && chromium ? await chromium.executablePath() : undefined;
+  } catch {
+    executablePath = undefined;
+  }
 
   console.log("🧭 Puppeteer executable path:", executablePath || "Local Chrome / Default");
 
@@ -66,13 +67,12 @@ async function createWhatsAppClient() {
         "--no-zygote",
         "--single-process",
         "--disable-background-timer-throttling",
-        "--disable-backgrounding-occluded-windows",
         "--disable-renderer-backgrounding",
       ],
     },
   });
 
-  // === QR & Session Events ===
+  // QR & session events
   client.on("qr", (qr) => {
     console.clear();
     console.log("📱 Scan this QR code to connect WhatsApp:\n");
@@ -94,7 +94,7 @@ async function createWhatsAppClient() {
   return client;
 }
 
-// === 4️⃣ CRM + AI Context ===
+// === 4️⃣ AI Context (Saloni CRM) ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 You handle all communication about:
@@ -123,7 +123,7 @@ function saveLead(lead) {
   console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
 }
 
-// === 6️⃣ AI Reply ===
+// === 6️⃣ AI Reply Helper ===
 async function getAIReply(userMessage) {
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
@@ -209,13 +209,13 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
   });
 }
 
-// === 8️⃣ Express Server (Keep-alive / Health) ===
+// === 8️⃣ Express Server (Health + Keep-alive) ===
 const app = express();
 const PORT = process.env.PORT || 3000;
 app.get("/", (req, res) => res.send("✅ CryoCorp O₂ LLP WhatsApp Bot — Saloni is Live!"));
 app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
 
-// === 9️⃣ Optional Self-Ping for Replit ===
+// === 9️⃣ Optional Replit Self-Ping ===
 if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   setInterval(() => {
     axios
