@@ -3,12 +3,15 @@ services:
     name: cryocorp-whatsapp-ai-bot
     env: node
     plan: free
-    region: oregon
-    buildCommand: "npm install"
-    startCommand: "node index.js"
-    autoDeploy: true
+    buildCommand: |
+      apt-get update
+      apt-get install -y chromium
+      npm install
+    startCommand: node index.js
     envVars:
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: PORT
-        value: 3000
+      - key: CHROME_PATH
+        value: /usr/bin/chromium
+      - key: PUPPETEER_EXECUTABLE_PATH
+        value: /usr/bin/chromium
+      - key: NODE_ENV
+        value: production

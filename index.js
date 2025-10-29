@@ -1,8 +1,8 @@
-// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (persistent memory + 24x7 Replit uptime)
+// CryoCorp O2 LLP WhatsApp AI Bot — Saloni CRM (Persistent Memory + 24×7 Uptime)
 require("dotenv").config();
 const fs = require("fs");
 const express = require("express");
-const fetch = require("node-fetch");
+const fetch = (...args) => import("node-fetch").then(({ default: fetch }) => fetch(...args));
 const { Client, LocalAuth } = require("whatsapp-web.js");
 const qrcode = require("qrcode-terminal");
 const OpenAI = require("openai");
@@ -36,20 +36,19 @@ const client = new Client({
   authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
   puppeteer: {
     headless: true,
-    executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || '/usr/bin/google-chrome-stable',
+    executablePath: process.env.CHROME_PATH || "/usr/bin/chromium",
     args: [
       "--no-sandbox",
       "--disable-setuid-sandbox",
       "--disable-dev-shm-usage",
-      "--disable-extensions",
+      "--disable-accelerated-2d-canvas",
+      "--no-first-run",
+      "--no-zygote",
       "--disable-gpu",
       "--single-process",
-      "--no-zygote",
-      "--disable-software-rasterizer",
     ],
   },
 });
-
 
 client.on("qr", (qr) => {
   console.clear();
@@ -133,7 +132,7 @@ client.on("message", async (msg) => {
   console.log(`💬 ${from}: ${text}`);
   if (msg.fromMe) return;
 
-  // New user
+  // New user onboarding
   if (!savedLead && !leadData[from]) {
     if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
       leadData[from] = { step: 1 };
@@ -144,7 +143,7 @@ client.on("message", async (msg) => {
     }
   }
 
-  // Registration process
+  // Lead data collection
   if (leadData[from]) {
     const lead = leadData[from];
     if (lead.step === 1) {
@@ -199,13 +198,13 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
 console.log("⚙️ Initializing WhatsApp client...");
 client.initialize();
 
-// === 🔟 Keep Replit Alive + Simple Web Page ===
+// === 🔟 Express Web Server (Keepalive Endpoint) ===
 const app = express();
 app.get("/", (req, res) => {
   res.send(`
     <h2>✅ CryoCorp WhatsApp AI Bot (Saloni)</h2>
     <p>Status: Running and connected to WhatsApp!</p>
-    <p>Uptime ping active to keep bot alive on Replit ☁️</p>
+    <p>Uptime ping active to keep bot alive ☁️</p>
   `);
 });
 
@@ -214,7 +213,12 @@ app.listen(PORT, () => {
   console.log(`🌐 Express web server running on port ${PORT}`);
 });
 
-// === 11️⃣ Self Ping Every 5 Minutes ===
+// === 11️⃣ Keep Alive (Self Ping Every 5 Minutes) ===
+const keepAliveURL =
+  process.env.KEEP_ALIVE_URL || "https://cryocorp-whatsapp-ai-bot.onrender.com";
+
 setInterval(() => {
-  fetch(`https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`).catch(() => {});
+  fetch(keepAliveURL)
+    .then(() => console.log("🔄 Pinged self to prevent sleep"))
+    .catch(() => console.log("⚠️ Keep-alive ping failed"));
 }, 5 * 60 * 1000);
