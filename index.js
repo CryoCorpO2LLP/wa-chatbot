@@ -8,15 +8,16 @@ import qrcode from 'qrcode';
 import { Client, LocalAuth } from 'whatsapp-web.js';
 import OpenAI from 'openai';
 
-// === 1️⃣ OpenAI Setup ===
+// === 1️⃣ OpenAI Setup with Safe Check ===
+let openai;
 if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ Missing OPENAI_API_KEY in environment variables. Exiting...");
-  process.exit(1);
+  console.error("❌ ERROR: OPENAI_API_KEY is not set in environment variables!");
+  console.error("Please add it to Railway / .env before starting the bot.");
+} else {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
 }
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
 
 // === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
@@ -29,9 +30,11 @@ function loadLeads() {
     return [];
   }
 }
+
 function saveLeads(leads) {
   fs.writeFileSync(leadsFile, JSON.stringify(leads, null, 2));
 }
+
 function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
@@ -39,14 +42,14 @@ function findLeadByNumber(number) {
 // === 3️⃣ Universal Puppeteer Setup (Render / Local) ===
 let chromium = null;
 try {
-  chromium = await import("@sparticuz/chromium");
+  chromium = require("@sparticuz/chromium");
 } catch {
   console.warn("⚠️ @sparticuz/chromium not found, using local Chrome instead.");
 }
 
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
-// === 4️⃣ QR Storage (for /qr route) ===
+// === 4️⃣ QR Storage ===
 let latestQR = null;
 
 // === 5️⃣ Create WhatsApp Client ===
@@ -132,6 +135,8 @@ function saveLead(lead) {
 
 // === 8️⃣ AI Reply ===
 async function getAIReply(userMessage) {
+  if (!openai) return "⚠️ AI is not available because the API key is missing.";
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
