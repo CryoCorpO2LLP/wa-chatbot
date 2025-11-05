@@ -1,16 +1,18 @@
-// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (QR Login Stable + Render Safe)
-require("dotenv").config();
-const fs = require("fs");
-const express = require("express");
-const axios = require("axios");
-const qrcode = require("qrcode");
-const { Client, LocalAuth } = require("whatsapp-web.js");
-const OpenAI = require("openai");
+// CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM
+import 'dotenv/config'; // automatically loads .env
+
+import fs from 'fs';
+import express from 'express';
+import axios from 'axios';
+import qrcode from 'qrcode';
+import { Client, LocalAuth } from 'whatsapp-web.js';
+import OpenAI from 'openai';
 
 // === 1️⃣ OpenAI Setup ===
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: process.env.OPENAI_API_KEY, // must exist in Railway Variables
 });
+
 
 // === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
@@ -55,24 +57,25 @@ async function createWhatsAppClient() {
   console.log("🧭 Puppeteer executable path:", executablePath || "Local Chrome / Default");
 
   const client = new Client({
-    authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
-    puppeteer: {
-      headless: true,
-      executablePath,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-extensions",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-      ],
-    },
-  });
+  authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
+  puppeteer: {
+    headless: false,
+    executablePath,
+    args: [
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-extensions",
+      "--disable-dev-shm-usage",
+      "--disable-gpu",
+      "--no-first-run",
+      "--no-zygote",
+      "--single-process",
+      "--disable-background-timer-throttling",
+      "--disable-renderer-backgrounding",
+    ],
+  },
+});
+
 
   // === QR Events ===
   client.on("qr", async (qr) => {
