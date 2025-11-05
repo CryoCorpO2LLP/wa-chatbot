@@ -5,7 +5,7 @@ import express from 'express';
 import axios from 'axios';
 import qrcode from 'qrcode';
 import pkg from 'whatsapp-web.js';  // <-- updated
-const { Client, LocalAuth } = pkg; // <-- destructure here
+const { Client, LocalAuth } = pkg;
 import OpenAI from 'openai';
 
 
