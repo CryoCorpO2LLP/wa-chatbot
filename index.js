@@ -9,10 +9,14 @@ import { Client, LocalAuth } from 'whatsapp-web.js';
 import OpenAI from 'openai';
 
 // === 1️⃣ OpenAI Setup ===
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // must exist in Railway Variables
-});
+if (!process.env.OPENAI_API_KEY) {
+  console.error("❌ Missing OPENAI_API_KEY in environment variables. Exiting...");
+  process.exit(1);
+}
 
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
 
 // === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
@@ -35,7 +39,7 @@ function findLeadByNumber(number) {
 // === 3️⃣ Universal Puppeteer Setup (Render / Local) ===
 let chromium = null;
 try {
-  chromium = require("@sparticuz/chromium");
+  chromium = await import("@sparticuz/chromium");
 } catch {
   console.warn("⚠️ @sparticuz/chromium not found, using local Chrome instead.");
 }
@@ -57,25 +61,24 @@ async function createWhatsAppClient() {
   console.log("🧭 Puppeteer executable path:", executablePath || "Local Chrome / Default");
 
   const client = new Client({
-  authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
-  puppeteer: {
-    headless: false,
-    executablePath,
-    args: [
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-extensions",
-      "--disable-dev-shm-usage",
-      "--disable-gpu",
-      "--no-first-run",
-      "--no-zygote",
-      "--single-process",
-      "--disable-background-timer-throttling",
-      "--disable-renderer-backgrounding",
-    ],
-  },
-});
-
+    authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
+    puppeteer: {
+      headless: false,
+      executablePath,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-extensions",
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--no-first-run",
+        "--no-zygote",
+        "--single-process",
+        "--disable-background-timer-throttling",
+        "--disable-renderer-backgrounding",
+      ],
+    },
+  });
 
   // === QR Events ===
   client.on("qr", async (qr) => {
