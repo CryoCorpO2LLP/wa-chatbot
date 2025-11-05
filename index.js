@@ -1,23 +1,23 @@
 // CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM
-import 'dotenv/config'; // automatically loads .env
-
+import 'dotenv/config';
 import fs from 'fs';
 import express from 'express';
 import axios from 'axios';
 import qrcode from 'qrcode';
-import { Client, LocalAuth } from 'whatsapp-web.js';
+import pkg from 'whatsapp-web.js';  // <-- updated
+const { Client, LocalAuth } = pkg; // <-- destructure here
 import OpenAI from 'openai';
 
-// === 1️⃣ OpenAI Setup with Safe Check ===
-let openai;
-if (!process.env.OPENAI_API_KEY) {
-  console.error("❌ ERROR: OPENAI_API_KEY is not set in environment variables!");
-  console.error("Please add it to Railway / .env before starting the bot.");
-} else {
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
-}
+
+// Rest of your code remains unchanged...
+
+// === 1️⃣ OpenAI Setup ===
+import OpenAI from 'openai';
+
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY, // Railway environment variable
+});
+
 
 // === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
