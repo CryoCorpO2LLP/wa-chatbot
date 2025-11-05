@@ -4,22 +4,23 @@ import fs from 'fs';
 import express from 'express';
 import axios from 'axios';
 import qrcode from 'qrcode';
-import pkg from 'whatsapp-web.js';  // <-- updated
-const { Client, LocalAuth } = pkg;
 import OpenAI from 'openai';
 
+// === 1️⃣ WhatsApp Web.js Setup (CommonJS Import Fix) ===
+import pkg from 'whatsapp-web.js';
+const { Client, LocalAuth } = pkg; // Compatible with ESM + CommonJS
 
-// Rest of your code remains unchanged...
+// === 2️⃣ OpenAI Setup ===
+let openai = null;
+if (!process.env.OPENAI_API_KEY) {
+  console.warn("⚠️ OPENAI_API_KEY not set. AI responses will be disabled.");
+} else {
+  openai = new OpenAI({
+    apiKey: process.env.OPENAI_API_KEY,
+  });
+}
 
-// === 1️⃣ OpenAI Setup ===
-import OpenAI from 'openai';
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY, // Railway environment variable
-});
-
-
-// === 2️⃣ Persistent Lead Storage ===
+// === 3️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
 if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, JSON.stringify([]));
 
@@ -39,20 +40,19 @@ function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 3️⃣ Universal Puppeteer Setup (Render / Local) ===
+// === 4️⃣ Universal Puppeteer Setup ===
 let chromium = null;
 try {
-  chromium = require("@sparticuz/chromium");
+  chromium = await import("@sparticuz/chromium");
 } catch {
-  console.warn("⚠️ @sparticuz/chromium not found, using local Chrome instead.");
+  console.warn("⚠️ @sparticuz/chromium not found, using system Chrome.");
 }
-
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
-// === 4️⃣ QR Storage ===
+// === 5️⃣ QR Storage ===
 let latestQR = null;
 
-// === 5️⃣ Create WhatsApp Client ===
+// === 6️⃣ Create WhatsApp Client ===
 async function createWhatsAppClient() {
   let executablePath;
   try {
@@ -66,7 +66,7 @@ async function createWhatsAppClient() {
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
     puppeteer: {
-      headless: false,
+      headless: true, // MUST be true for serverless / containerized
       executablePath,
       args: [
         "--no-sandbox",
@@ -83,28 +83,28 @@ async function createWhatsAppClient() {
     },
   });
 
-  // === QR Events ===
   client.on("qr", async (qr) => {
     latestQR = await qrcode.toDataURL(qr);
     console.log("📱 New QR generated — open /qr to scan it.");
   });
 
-  client.on("loading_screen", (p, msg) =>
-    console.log(`⏳ Loading WhatsApp Web ${p}%: ${msg}`)
+  client.on("loading_screen", (percent, msg) =>
+    console.log(`⏳ Loading WhatsApp Web ${percent}%: ${msg}`)
   );
+
   client.on("authenticated", () => console.log("🔐 Authenticated successfully!"));
   client.on("auth_failure", (msg) => console.error("❌ Authentication failure:", msg));
-  client.on("disconnected", (r) => {
-    console.log("⚠️ Disconnected:", r);
+  client.on("disconnected", (reason) => {
+    console.log("⚠️ Disconnected:", reason);
     console.log("♻️ Restarting WhatsApp client...");
     setTimeout(() => client.initialize(), 5000);
   });
-  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
 
+  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
   return client;
 }
 
-// === 6️⃣ AI Context (Saloni CRM Persona) ===
+// === 7️⃣ AI Context ===
 const SALONI_CONTEXT = `
 You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 You handle all communication about:
@@ -120,7 +120,7 @@ If the query is technical (PSA/ASU plant, capacity, ROI, purity), reply:
 Never re-ask info already given.
 `;
 
-// === 7️⃣ Temporary Lead Tracker ===
+// === 8️⃣ Temporary Lead Tracker ===
 const leadData = {};
 
 function saveLead(lead) {
@@ -133,7 +133,7 @@ function saveLead(lead) {
   console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
 }
 
-// === 8️⃣ AI Reply ===
+// === 9️⃣ AI Reply ===
 async function getAIReply(userMessage) {
   if (!openai) return "⚠️ AI is not available because the API key is missing.";
 
@@ -145,10 +145,11 @@ async function getAIReply(userMessage) {
     ],
     temperature: 0.7,
   });
+
   return completion.choices[0].message.content.trim();
 }
 
-// === 9️⃣ WhatsApp Message Handling ===
+// === 🔟 WhatsApp Message Handling ===
 async function setupMessageHandler(client) {
   client.on("message", async (msg) => {
     const text = msg.body.trim();
@@ -158,7 +159,6 @@ async function setupMessageHandler(client) {
 
     if (msg.fromMe) return;
 
-    // New lead onboarding
     if (!savedLead && !leadData[from]) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
         leadData[from] = { step: 1 };
@@ -169,7 +169,6 @@ async function setupMessageHandler(client) {
       }
     }
 
-    // Sequential lead data capture
     if (leadData[from]) {
       const lead = leadData[from];
       if (lead.step === 1) {
@@ -199,7 +198,6 @@ async function setupMessageHandler(client) {
       }
     }
 
-    // Returning leads
     if (savedLead) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
         await msg.reply(
@@ -221,7 +219,7 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
   });
 }
 
-// === 🔟 Express Web Server ===
+// === 1️⃣1️⃣ Express Web Server ===
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -237,7 +235,6 @@ app.get("/", (req, res) => {
   `);
 });
 
-// QR Web Route
 app.get("/qr", (req, res) => {
   if (!latestQR) {
     return res.send(`
@@ -260,7 +257,7 @@ app.get("/qr", (req, res) => {
 
 app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
 
-// === 11️⃣ Optional Replit Self-Ping ===
+// === 1️⃣2️⃣ Optional Replit Self-Ping ===
 if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   setInterval(() => {
     axios
@@ -270,7 +267,7 @@ if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   }, 5 * 60 * 1000);
 }
 
-// === 12️⃣ Start WhatsApp Client ===
+// === 1️⃣3️⃣ Initialize WhatsApp Client ===
 (async () => {
   console.log("⚙️ Initializing WhatsApp client...");
   const client = await createWhatsAppClient();
