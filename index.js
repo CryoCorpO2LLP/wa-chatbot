@@ -1,4 +1,6 @@
 // CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM
+
+// === 0️⃣ Load Environment Variables ===
 import 'dotenv/config';
 import fs from 'fs';
 import express from 'express';
@@ -6,18 +8,24 @@ import axios from 'axios';
 import qrcode from 'qrcode';
 import OpenAI from 'openai';
 
-// === 1️⃣ WhatsApp Web.js Setup (CommonJS Import Fix) ===
+// === 1️⃣ WhatsApp Web.js Setup ===
 import pkg from 'whatsapp-web.js';
 const { Client, LocalAuth } = pkg;
 
-// === 2️⃣ OpenAI Setup ===
+// === 2️⃣ OpenAI Setup (Fixed for sk-proj keys) ===
 let openai = null;
-if (!process.env.OPENAI_API_KEY) {
-  console.warn("⚠️ OPENAI_API_KEY not set. AI responses will be disabled.");
-} else {
-  openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-  });
+
+try {
+  if (!process.env.OPENAI_API_KEY) {
+    console.warn("⚠️ OPENAI_API_KEY not set. AI responses will be disabled.");
+  } else {
+    openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY.trim(), // ✅ remove accidental spaces
+    });
+    console.log("🤖 OpenAI client initialized successfully.");
+  }
+} catch (err) {
+  console.error("❌ Failed to initialize OpenAI client:", err.message);
 }
 
 // === 3️⃣ Persistent Lead Storage ===
@@ -40,9 +48,9 @@ function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 4️⃣ Universal Puppeteer Setup (Render Safe) ===
+// === 4️⃣ Puppeteer Setup (Replit / Render Safe) ===
 import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min'; // ✅ lightweight, server-safe chromium
+import chromium from '@sparticuz/chromium-min';
 
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
@@ -65,7 +73,12 @@ async function createWhatsAppClient() {
     puppeteer: {
       headless: chromium.headless,
       executablePath,
-      args: chromium.args,
+      args: [
+        ...chromium.args,
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
     },
   });
 
@@ -74,19 +87,14 @@ async function createWhatsAppClient() {
     console.log("📱 New QR generated — open /qr to scan it.");
   });
 
-  client.on("loading_screen", (percent, msg) =>
-    console.log(`⏳ Loading WhatsApp Web ${percent}%: ${msg}`)
-  );
-
   client.on("authenticated", () => console.log("🔐 Authenticated successfully!"));
   client.on("auth_failure", (msg) => console.error("❌ Authentication failure:", msg));
+  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
   client.on("disconnected", (reason) => {
     console.log("⚠️ Disconnected:", reason);
-    console.log("♻️ Restarting WhatsApp client...");
     setTimeout(() => client.initialize(), 5000);
   });
 
-  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
   return client;
 }
 
@@ -96,14 +104,13 @@ You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
 You handle all communication about:
 - Sales Orders (SO)
 - Purchase Orders (PO)
-- Performa Invoices (PI)
+- Proforma Invoices (PI)
 - Dispatches, Payments, Follow-ups, and Client CRM.
 
 Be friendly, polite, and professional.
 If the query is technical (PSA/ASU plant, capacity, ROI, purity), reply:
 "Let me connect you to our technical team for detailed assistance."
-
-Never re-ask info already given.
+Never re-ask information already given.
 `;
 
 // === 8️⃣ Temporary Lead Tracker ===
@@ -123,28 +130,34 @@ function saveLead(lead) {
 async function getAIReply(userMessage) {
   if (!openai) return "⚠️ AI is not available because the API key is missing.";
 
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: SALONI_CONTEXT },
-      { role: "user", content: userMessage },
-    ],
-    temperature: 0.7,
-  });
+  try {
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: SALONI_CONTEXT },
+        { role: "user", content: userMessage },
+      ],
+      temperature: 0.7,
+    });
 
-  return completion.choices[0].message.content.trim();
+    return completion.choices[0].message.content.trim();
+  } catch (error) {
+    console.error("❌ OpenAI API error:", error.message);
+    return "⚠️ Sorry, I couldn’t reach CryoCorp AI servers right now.";
+  }
 }
 
-// === 🔟 WhatsApp Message Handling ===
+// === 🔟 WhatsApp Message Handler ===
 async function setupMessageHandler(client) {
   client.on("message", async (msg) => {
     const text = msg.body.trim();
     const from = msg.from;
     const savedLead = findLeadByNumber(from);
-    console.log(`💬 ${from}: ${text}`);
 
+    console.log(`💬 ${from}: ${text}`);
     if (msg.fromMe) return;
 
+    // Lead collection flow
     if (!savedLead && !leadData[from]) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
         leadData[from] = { step: 1 };
@@ -184,6 +197,7 @@ async function setupMessageHandler(client) {
       }
     }
 
+    // Returning lead: AI response
     if (savedLead) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
         await msg.reply(
@@ -193,14 +207,9 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
         return;
       }
 
-      try {
-        const reply = await getAIReply(text);
-        await msg.reply(reply);
-        console.log(`🤖 Saloni: ${reply}`);
-      } catch (err) {
-        console.error("❌ AI Error:", err);
-        await msg.reply("Sorry, something went wrong while connecting to CryoCorp AI.");
-      }
+      const reply = await getAIReply(text);
+      await msg.reply(reply);
+      console.log(`🤖 Saloni: ${reply}`);
     }
   });
 }
@@ -243,7 +252,7 @@ app.get("/qr", (req, res) => {
 
 app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
 
-// === 1️⃣2️⃣ Optional Replit Self-Ping ===
+// === 1️⃣2️⃣ Replit Self-Ping (Keep Alive) ===
 if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   setInterval(() => {
     axios
