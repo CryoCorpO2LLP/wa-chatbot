@@ -2,6 +2,7 @@
   "name": "cryocorp-whatsapp-ai-bot",
   "version": "1.0.0",
   "description": "CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM (persistent memory + 24x7 uptime, works on Render + Replit + VSCode)",
+  "type": "module",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -20,7 +21,7 @@
   "author": "CryoCorp O₂ LLP",
   "license": "ISC",
   "dependencies": {
-    "@sparticuz/chromium": "^127.0.0",
+    "@sparticuz/chromium-min": "^141.0.0",
     "axios": "^1.13.2",
     "dotenv": "^17.2.3",
     "express": "^5.1.0",
@@ -28,10 +29,10 @@
     "google-spreadsheet": "^5.0.2",
     "node-fetch": "^3.3.2",
     "openai": "^6.8.1",
-    "puppeteer": "^24.26.1",
+    "puppeteer-core": "^24.29.0",
     "qrcode": "^1.5.4",
     "qrcode-terminal": "^0.12.0",
-    "whatsapp-web.js": "^1.19.0"
+    "whatsapp-web.js": "^1.23.0"
   },
   "repository": {
     "type": "git",

@@ -8,7 +8,7 @@ import OpenAI from 'openai';
 
 // === 1️⃣ WhatsApp Web.js Setup (CommonJS Import Fix) ===
 import pkg from 'whatsapp-web.js';
-const { Client, LocalAuth } = pkg; // Compatible with ESM + CommonJS
+const { Client, LocalAuth } = pkg;
 
 // === 2️⃣ OpenAI Setup ===
 let openai = null;
@@ -40,13 +40,10 @@ function findLeadByNumber(number) {
   return loadLeads().find((lead) => lead.number === number);
 }
 
-// === 4️⃣ Universal Puppeteer Setup ===
-let chromium = null;
-try {
-  chromium = await import("@sparticuz/chromium");
-} catch {
-  console.warn("⚠️ @sparticuz/chromium not found, using system Chrome.");
-}
+// === 4️⃣ Universal Puppeteer Setup (Render Safe) ===
+import puppeteer from 'puppeteer-core';
+import chromium from '@sparticuz/chromium-min'; // ✅ lightweight, server-safe chromium
+
 const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
 
 // === 5️⃣ QR Storage ===
@@ -56,7 +53,7 @@ let latestQR = null;
 async function createWhatsAppClient() {
   let executablePath;
   try {
-    executablePath = isRender && chromium ? await chromium.executablePath() : undefined;
+    executablePath = await chromium.executablePath();
   } catch {
     executablePath = undefined;
   }
@@ -66,20 +63,9 @@ async function createWhatsAppClient() {
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
     puppeteer: {
-      headless: true, // MUST be true for serverless / containerized
+      headless: chromium.headless,
       executablePath,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-extensions",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--no-first-run",
-        "--no-zygote",
-        "--single-process",
-        "--disable-background-timer-throttling",
-        "--disable-renderer-backgrounding",
-      ],
+      args: chromium.args,
     },
   });
 
