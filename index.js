@@ -1,212 +1,145 @@
 // CryoCorp O₂ LLP WhatsApp AI Bot — Saloni CRM
-
-// === 0️⃣ Load Environment Variables ===
 import 'dotenv/config';
 import fs from 'fs';
 import express from 'express';
 import axios from 'axios';
 import qrcode from 'qrcode';
 import OpenAI from 'openai';
-
-// === 1️⃣ WhatsApp Web.js Setup ===
 import pkg from 'whatsapp-web.js';
+import puppeteer from 'puppeteer';
 const { Client, LocalAuth } = pkg;
 
-// === 2️⃣ OpenAI Setup (Fixed for sk-proj keys) ===
+// === 1️⃣ OpenAI Setup ===
 let openai = null;
-
 try {
   if (!process.env.OPENAI_API_KEY) {
-    console.warn("⚠️ OPENAI_API_KEY not set. AI responses will be disabled.");
+    console.warn("⚠️ OPENAI_API_KEY not found in .env — AI will be disabled");
   } else {
-    openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY.trim(), // ✅ remove accidental spaces
-    });
-    console.log("🤖 OpenAI client initialized successfully.");
+    openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY.trim() });
+    console.log("🤖 OpenAI initialized.");
   }
 } catch (err) {
-  console.error("❌ Failed to initialize OpenAI client:", err.message);
+  console.error("❌ OpenAI init error:", err.message);
 }
 
-// === 3️⃣ Persistent Lead Storage ===
+// === 2️⃣ Persistent Lead Storage ===
 const leadsFile = "./leads.json";
-if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, JSON.stringify([]));
+if (!fs.existsSync(leadsFile)) fs.writeFileSync(leadsFile, "[]");
+const loadLeads = () => JSON.parse(fs.readFileSync(leadsFile, "utf8") || "[]");
+const saveLeads = (data) => fs.writeFileSync(leadsFile, JSON.stringify(data, null, 2));
+const findLeadByNumber = (num) => loadLeads().find((l) => l.number === num);
 
-function loadLeads() {
-  try {
-    return JSON.parse(fs.readFileSync(leadsFile, "utf8"));
-  } catch {
-    return [];
-  }
-}
+// === 3️⃣ Environment Detect ===
+const IS_LOCAL = !process.env.RENDER && !process.env.RAILWAY_STATIC_URL && !process.env.REPL_SLUG;
+console.log(`🌍 Environment: ${IS_LOCAL ? "Local (VS Code)" : "Cloud (Render/Railway/Replit)"}`);
 
-function saveLeads(leads) {
-  fs.writeFileSync(leadsFile, JSON.stringify(leads, null, 2));
-}
-
-function findLeadByNumber(number) {
-  return loadLeads().find((lead) => lead.number === number);
-}
-
-// === 4️⃣ Puppeteer Setup (Replit / Render Safe) ===
-import puppeteer from 'puppeteer-core';
-import chromium from '@sparticuz/chromium-min';
-
-const isRender = !!process.env.RENDER || process.env.NODE_ENV === "production";
-
-// === 5️⃣ QR Storage ===
+// === 4️⃣ QR Code Storage ===
 let latestQR = null;
 
-// === 6️⃣ Create WhatsApp Client ===
+// === 5️⃣ Create WhatsApp Client (Local QR Fix) ===
 async function createWhatsAppClient() {
-  let executablePath;
-  try {
-    executablePath = await chromium.executablePath();
-  } catch {
-    executablePath = undefined;
-  }
-
-  console.log("🧭 Puppeteer executable path:", executablePath || "Local Chrome / Default");
+  console.log("🧭 Launching WhatsApp client...");
 
   const client = new Client({
     authStrategy: new LocalAuth({ dataPath: "./.wwebjs_auth" }),
     puppeteer: {
-      headless: chromium.headless,
-      executablePath,
-      args: [
-        ...chromium.args,
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-      ],
+      headless: false, // 👈 show Chrome window for local debugging
+      executablePath: await puppeteer.executablePath(),
+      args: ["--no-sandbox", "--disable-setuid-sandbox"],
     },
   });
 
   client.on("qr", async (qr) => {
     latestQR = await qrcode.toDataURL(qr);
-    console.log("📱 New QR generated — open /qr to scan it.");
+    console.log("📱 QR ready — open http://localhost:3000/qr to scan!");
   });
 
   client.on("authenticated", () => console.log("🔐 Authenticated successfully!"));
-  client.on("auth_failure", (msg) => console.error("❌ Authentication failure:", msg));
-  client.on("ready", () => console.log("✅ CryoCorp WhatsApp AI Bot (Saloni) is ready!"));
-  client.on("disconnected", (reason) => {
-    console.log("⚠️ Disconnected:", reason);
-    setTimeout(() => client.initialize(), 5000);
-  });
+  client.on("ready", () => console.log("✅ WhatsApp connected and ready!"));
+  client.on("disconnected", (r) => console.log("⚠️ Disconnected:", r));
 
   return client;
 }
 
-// === 7️⃣ AI Context ===
+// === 6️⃣ Saloni CRM Context ===
 const SALONI_CONTEXT = `
-You are *Saloni*, the Customer Relationship Manager at CryoCorp O₂ LLP.
-You handle all communication about:
-- Sales Orders (SO)
-- Purchase Orders (PO)
-- Proforma Invoices (PI)
-- Dispatches, Payments, Follow-ups, and Client CRM.
-
-Be friendly, polite, and professional.
-If the query is technical (PSA/ASU plant, capacity, ROI, purity), reply:
+You are Saloni, CRM Executive at CryoCorp O₂ LLP.
+Assist clients regarding Sales Orders, Purchase Orders, Proforma Invoices, Dispatches, Payments, or CRM queries.
+If technical (PSA/ASU details), say:
 "Let me connect you to our technical team for detailed assistance."
-Never re-ask information already given.
+Keep responses polite, brief, and professional.
 `;
 
-// === 8️⃣ Temporary Lead Tracker ===
-const leadData = {};
-
-function saveLead(lead) {
-  const leads = loadLeads();
-  leads.push({
-    Timestamp: new Date().toLocaleString(),
-    ...lead,
-  });
-  saveLeads(leads);
-  console.log(`✅ Saved lead: ${lead.name} (${lead.number})`);
-}
-
-// === 9️⃣ AI Reply ===
-async function getAIReply(userMessage) {
-  if (!openai) return "⚠️ AI is not available because the API key is missing.";
-
+// === 7️⃣ AI Chat Function ===
+async function getAIReply(msg) {
+  if (!openai) return "⚠️ AI unavailable (missing API key).";
   try {
-    const completion = await openai.chat.completions.create({
+    const res = await openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: SALONI_CONTEXT },
-        { role: "user", content: userMessage },
+        { role: "user", content: msg },
       ],
       temperature: 0.7,
     });
-
-    return completion.choices[0].message.content.trim();
-  } catch (error) {
-    console.error("❌ OpenAI API error:", error.message);
-    return "⚠️ Sorry, I couldn’t reach CryoCorp AI servers right now.";
+    return res.choices[0].message.content.trim();
+  } catch (err) {
+    console.error("❌ OpenAI Error:", err.message);
+    return "⚠️ Sorry, I couldn't reach CryoCorp AI right now.";
   }
 }
 
-// === 🔟 WhatsApp Message Handler ===
+// === 8️⃣ WhatsApp Message Handler ===
+const tempLeads = {};
+
 async function setupMessageHandler(client) {
   client.on("message", async (msg) => {
-    const text = msg.body.trim();
     const from = msg.from;
-    const savedLead = findLeadByNumber(from);
+    const text = msg.body.trim();
+    const saved = findLeadByNumber(from);
 
-    console.log(`💬 ${from}: ${text}`);
     if (msg.fromMe) return;
+    console.log(`💬 ${from}: ${text}`);
 
     // Lead collection flow
-    if (!savedLead && !leadData[from]) {
+    if (!saved && !tempLeads[from]) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
-        leadData[from] = { step: 1 };
-        await msg.reply(
-          "👋 Hello! This is *Saloni* from *CryoCorp O₂ LLP*.\nWelcome! May I know your *Full Name*?"
-        );
+        tempLeads[from] = { step: 1 };
+        await msg.reply("👋 Hello! I'm *Saloni* from *CryoCorp O₂ LLP*.\nMay I know your *Full Name*?");
         return;
       }
     }
 
-    if (leadData[from]) {
-      const lead = leadData[from];
+    if (tempLeads[from]) {
+      const lead = tempLeads[from];
       if (lead.step === 1) {
         lead.name = text;
         lead.step = 2;
-        await msg.reply(`Nice to meet you, *${lead.name}*! May I know your *Company Name*?`);
-        return;
+        return msg.reply(`Nice to meet you, *${lead.name}*! May I know your *Company Name*?`);
       } else if (lead.step === 2) {
         lead.company = text;
         lead.step = 3;
-        await msg.reply("Got it 👍 Could you please share your *Email ID*?");
-        return;
+        return msg.reply("Got it 👍 Please share your *Email ID*.");
       } else if (lead.step === 3) {
         lead.email = text;
         lead.step = 4;
-        await msg.reply("Perfect 😊 Lastly, may I have your *Contact Number*?");
-        return;
+        return msg.reply("Perfect 😊 Lastly, may I have your *Contact Number*?");
       } else if (lead.step === 4) {
         lead.contact = text;
         lead.number = from;
-        saveLead(lead);
-        await msg.reply(
-          `✅ Thank you, *${lead.name} from ${lead.company}!* Your details have been securely saved.\nHow can I assist you today?`
-        );
-        delete leadData[from];
-        return;
+        const leads = loadLeads();
+        leads.push({ Timestamp: new Date().toLocaleString(), ...lead });
+        saveLeads(leads);
+        delete tempLeads[from];
+        return msg.reply(`✅ Thank you, *${lead.name} from ${lead.company}*! Your details are saved.\nHow can I assist you today?`);
       }
     }
 
-    // Returning lead: AI response
-    if (savedLead) {
+    // Returning leads (AI reply)
+    if (saved) {
       if (["hi", "hello", "hey"].includes(text.toLowerCase())) {
-        await msg.reply(
-          `👋 Welcome back, *${savedLead.name} from ${savedLead.company}!*  
-How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
-        );
-        return;
+        return msg.reply(`👋 Welcome back, *${saved.name} from ${saved.company}*! How can I assist you today?`);
       }
-
       const reply = await getAIReply(text);
       await msg.reply(reply);
       console.log(`🤖 Saloni: ${reply}`);
@@ -214,58 +147,35 @@ How can I assist you today — Sales Order, Purchase, PI, or Payment update?`
   });
 }
 
-// === 1️⃣1️⃣ Express Web Server ===
+// === 9️⃣ Express Server (QR Route) ===
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-app.get("/", (req, res) => {
-  res.send(`
-    <html>
-      <head><title>CryoCorp WhatsApp AI Bot</title></head>
-      <body style="font-family:sans-serif; text-align:center; background:#f9f9f9; color:#333;">
-        <h2>✅ CryoCorp O₂ LLP WhatsApp Bot — Saloni is Live!</h2>
-        <p>Visit <a href="/qr">/qr</a> to scan the WhatsApp login QR code.</p>
-      </body>
-    </html>
-  `);
-});
+app.get("/", (req, res) =>
+  res.send(`<h2>✅ CryoCorp WhatsApp AI Bot is Live!</h2><p>Visit <a href="/qr">/qr</a> to scan the QR.</p>`)
+);
 
-app.get("/qr", (req, res) => {
-  if (!latestQR) {
-    return res.send(`
-      <html><body style="font-family:sans-serif; text-align:center;">
-      <h3>❌ QR not ready yet. Please refresh after a few seconds.</h3>
-      </body></html>
-    `);
-  }
-  res.send(`
-    <html>
-      <head><title>WhatsApp QR - CryoCorp</title></head>
-      <body style="text-align:center; background:#f5f5f5; font-family:sans-serif;">
-        <h2>📱 Scan this QR to connect WhatsApp</h2>
-        <img src="${latestQR}" style="width:300px; border:8px solid #25D366; border-radius:12px; margin-top:20px;" />
-        <p style="margin-top:15px;">Refresh if expired.</p>
-      </body>
-    </html>
-  `);
-});
+app.get("/qr", (req, res) =>
+  res.send(
+    latestQR
+      ? `<h3>📱 Scan this QR:</h3><img src="${latestQR}" width="300"/><p>Refresh if expired.</p>`
+      : "<h3>⏳ QR not ready yet. Please refresh.</h3>"
+  )
+);
 
-app.listen(PORT, () => console.log(`🌐 Express web server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`🌐 Web server running on port ${PORT}`));
 
-// === 1️⃣2️⃣ Replit Self-Ping (Keep Alive) ===
+// === 🔟 Keep Alive (Replit Only) ===
 if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
   setInterval(() => {
-    axios
-      .get(`https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`)
-      .then(() => console.log("🔁 Self-ping OK"))
-      .catch(() => console.log("⚠️ Self-ping failed (maybe restarting)"));
+    axios.get(`https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co/`).catch(() => {});
   }, 5 * 60 * 1000);
 }
 
-// === 1️⃣3️⃣ Initialize WhatsApp Client ===
+// === 1️⃣1️⃣ Initialize Client ===
 (async () => {
   console.log("⚙️ Initializing WhatsApp client...");
   const client = await createWhatsAppClient();
   await setupMessageHandler(client);
-  client.initialize();
+  await client.initialize();
 })();
